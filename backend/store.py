@@ -15,6 +15,7 @@ from typing import Optional
 from uuid import uuid4
 
 from .models import (
+    InvitationPreview,
     InvitationResponse,
     JoinRequestResponse,
     LobbyResponse,
@@ -49,6 +50,9 @@ class ParticipantRecord:
     id: str
     display_name: str
     created_at: datetime
+    # MVP plaintext credential for this session only. A production database
+    # implementation must encrypt this at rest and support rotation.
+    access_token: Optional[str] = None
 
 
 @dataclass
@@ -57,6 +61,7 @@ class JoinRequestRecord:
     display_name: str
     status: RequestStatus
     created_at: datetime
+    participant_id: Optional[str] = None
 
 
 @dataclass
@@ -65,6 +70,7 @@ class SessionRecord:
     name: str
     capacity: int
     host_token_hash: str
+    host_name: str = "Host"
     status: SessionStatus = SessionStatus.WAITING
     participants: dict[str, ParticipantRecord] = field(default_factory=dict)
     requests: dict[str, JoinRequestRecord] = field(default_factory=dict)
@@ -76,14 +82,16 @@ class InMemorySessionStore:
     def __init__(self) -> None:
         self._sessions: dict[str, SessionRecord] = {}
 
-    def create_session(self, name: str, capacity: int) -> tuple[SessionCredentials, SessionRecord]:
+    def create_session(self, name: str, capacity: int, host_name: Optional[str] = None) -> tuple[SessionCredentials, SessionRecord]:
         session_id = str(uuid4())
         host_token = secrets.token_urlsafe(32)
+        clean_host = (host_name or "").strip() or "Host"
         record = SessionRecord(
             id=session_id,
             name=name.strip(),
             capacity=capacity,
             host_token_hash=hash_secret(host_token),
+            host_name=clean_host,
         )
         self._sessions[session_id] = record
         return (
@@ -93,6 +101,7 @@ class InMemorySessionStore:
                 name=record.name,
                 capacity=capacity,
                 status=record.status,
+                host_name=record.host_name,
             ),
             record,
         )
@@ -124,6 +133,39 @@ class InMemorySessionStore:
             return SessionStatus.FULL
         return record.status
 
+    def joinable_status(self, record: SessionRecord) -> str:
+        """Public joinability for the Join page: open | full | locked | started | ended."""
+        status = self._status(record)
+        if status == SessionStatus.WAITING:
+            return "open"
+        if status == SessionStatus.FULL:
+            return "full"
+        if status == SessionStatus.LOCKED:
+            return "locked"
+        if status in {SessionStatus.STARTING, SessionStatus.STARTED}:
+            return "started"
+        return "ended"
+
+    def invitation_preview(self, record: SessionRecord, frontend_origin: str) -> InvitationPreview:
+        invitation = self._invitation_response(record, frontend_origin)
+        if invitation is None:
+            raise ValueError("invalid_invitation")
+        return InvitationPreview(
+            session_name=record.name,
+            host_name=record.host_name,
+            capacity=record.capacity,
+            participant_count=len(record.participants),
+            session_status=self.joinable_status(record),
+            invitation=invitation,
+        )
+
+    def authorize_participant(self, record: SessionRecord, participant_id: str, token: str) -> bool:
+        """Validate a participant credential for future participant-scoped routes."""
+        participant = record.participants.get(participant_id)
+        if participant is None or not participant.access_token:
+            return False
+        return compare_digest(participant.access_token, token)
+
     def _invitation_response(self, record: SessionRecord, frontend_origin: str) -> Optional[InvitationResponse]:
         invitation = record.invitation
         if invitation is None:
@@ -140,6 +182,7 @@ class InMemorySessionStore:
         return LobbyResponse(
             session_id=record.id,
             name=record.name,
+            host_name=record.host_name,
             capacity=record.capacity,
             status=self._status(record),
             host_token=include_host_token,
@@ -207,7 +250,9 @@ class InMemorySessionStore:
                 raise ValueError("session_full")
             request.status = RequestStatus.APPROVED
             participant = ParticipantRecord(id=str(uuid4()), display_name=request.display_name, created_at=utc_now())
+            participant.access_token = secrets.token_urlsafe(24)
             record.participants[participant.id] = participant
+            request.participant_id = participant.id
             if len(record.participants) >= record.capacity:
                 record.status = SessionStatus.FULL
             return request

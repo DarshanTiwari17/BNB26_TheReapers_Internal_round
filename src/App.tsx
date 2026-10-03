@@ -29,10 +29,11 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/join/:token" element={<JoinSession />} />
-        <Route path="/join" element={<Placeholder title="Join Session" body="Scan a host invitation QR code to join a session." />} />
+        <Route path="/join" element={<JoinSession />} />
         <Route path="/create-session" element={<SessionCreation />} />
         <Route path="/host-lobby" element={<HostLobby />} />
         <Route path="/roundtable" element={<Placeholder title="Live Roundtable" body="Live Roundtable is coming soon. This placeholder route reserves the future live session experience." />} />
+        <Route path="/microphone-setup" element={<Placeholder title="Microphone Setup" body="Microphone setup is coming soon. Approved participants will continue here." />} />
         <Route path="/results" element={<Placeholder title="Meeting Results" body="Meeting Results is coming soon. This placeholder route reserves the future transcript results page." />} />
         <Route path="*" element={<Placeholder title="Not found" body="This page does not exist yet." />} />
       </Routes>

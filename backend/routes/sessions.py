@@ -12,7 +12,7 @@ def frontend_origin(request: Request) -> str:
 
 @router.post("/sessions", response_model=SessionCredentials)
 def create_session(payload: CreateSessionRequest) -> SessionCredentials:
-    credentials, _ = store.create_session(payload.name, payload.capacity)
+    credentials, _ = store.create_session(payload.name, payload.capacity, payload.host_name)
     return credentials
 
 

@@ -22,6 +22,24 @@ export type JoinRequest = {
   created_at: string;
 };
 
+export type InvitationPreview = {
+  session_name: string;
+  host_name: string;
+  capacity: number;
+  participant_count: number;
+  session_status: "open" | "full" | "locked" | "started" | "ended";
+  invitation: Invitation;
+};
+
+export type JoinRequestStatus = {
+  id: string;
+  display_name: string;
+  status: RequestStatus;
+  created_at: string;
+  participant_id: string | null;
+  participant_token: string | null;
+};
+
 export type Lobby = {
   session_id: string;
   name: string;
@@ -116,4 +134,12 @@ export function startSession(sessionId: string, hostToken: string) {
 
 export function requestToJoin(token: string, displayName: string) {
   return request<JoinRequest>(`/api/invitations/${encodeURIComponent(token)}/join`, { method: "POST", body: JSON.stringify({ display_name: displayName }) });
+}
+
+export function getInvitationPreview(token: string) {
+  return request<InvitationPreview>(`/api/invitations/${encodeURIComponent(token)}`);
+}
+
+export function getJoinRequestStatus(token: string, requestId: string) {
+  return request<JoinRequestStatus>(`/api/invitations/${encodeURIComponent(token)}/requests/${encodeURIComponent(requestId)}`);
 }

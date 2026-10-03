@@ -27,6 +27,7 @@ class RequestStatus(str, Enum):
 class CreateSessionRequest(BaseModel):
     name: str = Field(min_length=1, max_length=80)
     capacity: int = Field(ge=2, le=100)
+    host_name: Optional[str] = Field(default=None, max_length=80)
 
 
 class SessionCredentials(BaseModel):
@@ -35,6 +36,7 @@ class SessionCredentials(BaseModel):
     name: str
     capacity: int
     status: SessionStatus
+    host_name: str
 
 
 class InvitationResponse(BaseModel):
@@ -61,12 +63,34 @@ class JoinRequestResponse(BaseModel):
 class LobbyResponse(BaseModel):
     session_id: str
     name: str
+    host_name: str
     capacity: int
     status: SessionStatus
     host_token: Optional[str] = None
     invitation: Optional[InvitationResponse] = None
     participants: list[ParticipantResponse]
     pending_requests: list[JoinRequestResponse]
+
+
+class InvitationPreview(BaseModel):
+    """Public session summary for the Join page. Contains no secrets."""
+
+    session_name: str
+    host_name: str
+    capacity: int
+    participant_count: int
+    session_status: str  # open | full | locked | started | ended
+    invitation: InvitationResponse
+
+
+class JoinRequestStatusResponse(BaseModel):
+    id: str
+    display_name: str
+    status: RequestStatus
+    created_at: datetime
+    participant_id: Optional[str] = None
+    # Short-lived credential for this session only. Returned when approved.
+    participant_token: Optional[str] = None
 
 
 class JoinRequestCreate(BaseModel):
