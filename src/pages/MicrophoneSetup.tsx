@@ -23,9 +23,9 @@ import {
 } from "../lib/audio";
 
 type ParticipantSession = {
-  sessionId?: string | null;
   invitationToken?: string;
   requestId?: string;
+  sessionId?: string | null;
   participantId?: string | null;
   participantToken?: string | null;
   displayName?: string;
@@ -161,6 +161,22 @@ export default function MicrophoneSetup() {
   // 01 microphone → 02 test → 03 position → 04 ready
   const stepIndex = permission !== "granted" ? 0 : test !== "passed" ? 1 : seat || seatSkipped ? 3 : 2;
   const ready = permission === "granted" && test === "passed" && !disconnected;
+
+  function continueToLiveSession() {
+    if (!participant || !participant.sessionId) {
+      navigate("/join");
+      return;
+    }
+    const sessionState = {
+      sessionId: participant.sessionId,
+      participantId: participant.participantId ?? null,
+      participantToken: participant.participantToken ?? null,
+      displayName: participant.displayName ?? "Participant",
+      sessionName: participant.sessionName ?? "Roundtable Session",
+      role: "participant",
+    };
+    navigate("/roundtable", { state: sessionState, replace: true });
+  }
 
   return (
     <div className="min-h-screen bg-[#F7F7F5] text-[#111111]">
@@ -308,19 +324,7 @@ export default function MicrophoneSetup() {
                     <button
                       type="button"
                       disabled={!ready}
-                      onClick={() =>
-                        navigate("/roundtable", {
-                          state: {
-                            session: {
-                              sessionId: participant?.sessionId ?? "",
-                              participantId: participant?.participantId ?? null,
-                              participantToken: participant?.participantToken ?? null,
-                              displayName: participant?.displayName ?? "Guest",
-                              sessionName: participant?.sessionName ?? "Roundtable session",
-                            },
-                          },
-                        })
-                      }
+                      onClick={continueToLiveSession}
                       className="group inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#111111] px-8 py-4 text-[15px] font-semibold text-white transition-all hover:-translate-y-[1px] hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {ready ? (
@@ -344,6 +348,17 @@ export default function MicrophoneSetup() {
               <>No account needed — access is temporary for this session only.</>
             )}
           </p>
+          {ready && participant?.sessionId && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                onClick={continueToLiveSession}
+                className="inline-flex min-h-[48px] items-center justify-center rounded-full border border-[#E4E4E0] bg-white px-6 py-3 text-[14px] font-semibold text-[#111111] transition hover:-translate-y-[1px] hover:border-[#111111]"
+              >
+                Join Live Session
+              </button>
+            </div>
+          )}
         </motion.div>
       </main>
       <Footer />

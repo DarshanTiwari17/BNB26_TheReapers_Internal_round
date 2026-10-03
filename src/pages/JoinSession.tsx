@@ -91,6 +91,7 @@ export default function JoinSession() {
       }
       switch (data.session_status) {
         case "open":
+        case "in_progress":
           setPhase({ name: "ready" });
           break;
         case "full":
@@ -197,9 +198,9 @@ export default function JoinSession() {
             sessionStorage.setItem(
               "roundtable.participantSession",
               JSON.stringify({
-                sessionId: preview?.session_id ?? null,
                 invitationToken: token,
                 requestId: status.id,
+                sessionId: preview?.session_id ?? null,
                 participantId: status.participant_id,
                 participantToken: status.participant_token,
                 displayName: status.display_name,
@@ -516,7 +517,8 @@ function JoinForm({
             label="Status"
             value={
               <span className="inline-flex items-center gap-1.5 font-semibold text-[#111111]">
-                <span className="h-[7px] w-[7px] rounded-full bg-[#18A874]" /> Session open
+                <span className="h-[7px] w-[7px] rounded-full bg-[#18A874]" />
+                {preview.session_status === "in_progress" ? "Live · approval required" : "Session open"}
               </span>
             }
           />
@@ -528,7 +530,9 @@ function JoinForm({
           What&apos;s your name?
         </label>
         <p className="mt-1.5 text-[14px] leading-relaxed text-[#666]">
-          This name will appear next to your speech in the live transcript.
+          {preview.session_status === "in_progress"
+            ? "The session is live. The host must approve your request before you join."
+            : "This name will appear next to your speech in the live transcript."}
         </p>
         <input
           ref={inputRef}

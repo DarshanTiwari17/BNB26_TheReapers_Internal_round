@@ -182,7 +182,14 @@ export default function HostLobby() {
   async function startMeeting() {
     await performAction("start", async () => {
       const updated = await startSession(session!.sessionId, session!.hostToken);
-      navigate("/roundtable", { state: { session, lobby: updated }, replace: true });
+      const hostState = {
+        sessionId: session!.sessionId,
+        hostToken: session!.hostToken,
+        displayName: "Host",
+        sessionName: session!.sessionName,
+        role: "host" as const,
+      };
+      navigate("/roundtable", { state: { ...hostState, session: { ...hostState }, lobby: updated }, replace: true });
       return updated;
     });
   }

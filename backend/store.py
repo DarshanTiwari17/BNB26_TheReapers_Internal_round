@@ -134,17 +134,16 @@ class InMemorySessionStore:
         return record.status
 
     def joinable_status(self, record: SessionRecord) -> str:
-        """Public joinability for the Join page: open | full | locked | started | ended."""
-        status = self._status(record)
-        if status == SessionStatus.WAITING:
-            return "open"
-        if status == SessionStatus.FULL:
-            return "full"
-        if status == SessionStatus.LOCKED:
+        """Public invitation state: open | in_progress | full | locked | ended."""
+        if record.status == SessionStatus.ENDED:
+            return "ended"
+        if record.status == SessionStatus.LOCKED:
             return "locked"
-        if status in {SessionStatus.STARTING, SessionStatus.STARTED}:
-            return "started"
-        return "ended"
+        if len(record.participants) >= record.capacity:
+            return "full"
+        if record.status in {SessionStatus.STARTING, SessionStatus.STARTED}:
+            return "in_progress"
+        return "open"
 
     def invitation_preview(self, record: SessionRecord, frontend_origin: str) -> InvitationPreview:
         invitation = self._invitation_response(record, frontend_origin)
@@ -225,12 +224,13 @@ class InMemorySessionStore:
                 raise ValueError("invitation_expired")
             if record.status == SessionStatus.LOCKED:
                 raise ValueError("session_locked")
-            if record.status in {SessionStatus.STARTING, SessionStatus.STARTED}:
+            if record.status == SessionStatus.STARTING:
                 raise ValueError("session_already_started")
             if record.status == SessionStatus.ENDED:
                 raise ValueError("session_ended")
             if len(record.participants) >= record.capacity:
-                record.status = SessionStatus.FULL
+                if record.status == SessionStatus.WAITING:
+                    record.status = SessionStatus.FULL
                 raise ValueError("session_full")
             normalized = display_name.strip()
             if any(p.display_name.casefold() == normalized.casefold() for p in record.participants.values()) or any(
@@ -246,7 +246,7 @@ class InMemorySessionStore:
             request = record.requests.get(request_id)
             if not request or request.status != RequestStatus.PENDING:
                 raise ValueError("invalid_request")
-            if len(record.participants) >= record.capacity:
+            if record.status == SessionStatus.WAITING and len(record.participants) >= record.capacity:
                 record.status = SessionStatus.FULL
                 raise ValueError("session_full")
             request.status = RequestStatus.APPROVED

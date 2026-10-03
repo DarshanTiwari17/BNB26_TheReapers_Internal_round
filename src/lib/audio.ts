@@ -25,8 +25,14 @@ export async function requestMicrophone(deviceId?: string): Promise<MediaStream>
   if (!microphoneSupported()) {
     throw new DOMException("Microphone not supported", "NotSupportedError");
   }
+  const audio: MediaTrackConstraints = {
+    echoCancellation: true,
+    noiseSuppression: true,
+    autoGainControl: true,
+    ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+  };
   return navigator.mediaDevices.getUserMedia({
-    audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+    audio,
   });
 }
 
