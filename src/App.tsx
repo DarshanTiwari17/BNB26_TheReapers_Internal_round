@@ -6,6 +6,7 @@ import Placeholder from "./pages/Placeholder";
 import SessionCreation from "./pages/SessionCreation";
 import HostLobby from "./pages/HostLobby";
 import JoinSession from "./pages/JoinSession";
+import MicrophoneSetup from "./pages/MicrophoneSetup";
 
 function ScrollManager() {
   const { pathname, hash } = useLocation();
@@ -33,7 +34,7 @@ export default function App() {
         <Route path="/create-session" element={<SessionCreation />} />
         <Route path="/host-lobby" element={<HostLobby />} />
         <Route path="/roundtable" element={<Placeholder title="Live Roundtable" body="Live Roundtable is coming soon. This placeholder route reserves the future live session experience." />} />
-        <Route path="/microphone-setup" element={<Placeholder title="Microphone Setup" body="Microphone setup is coming soon. Approved participants will continue here." />} />
+        <Route path="/microphone-setup" element={<MicrophoneSetup />} />
         <Route path="/results" element={<Placeholder title="Meeting Results" body="Meeting Results is coming soon. This placeholder route reserves the future transcript results page." />} />
         <Route path="*" element={<Placeholder title="Not found" body="This page does not exist yet." />} />
       </Routes>
