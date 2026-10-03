@@ -1,10 +1,10 @@
 import { Reveal } from "./Reveal";
 
 const cases = [
-  { tag: "01", title: "MEETINGS", body: "Keep every speaker and decision in context." },
-  { tag: "02", title: "CLASSROOMS", body: "Capture discussions without a single microphone at the front." },
-  { tag: "03", title: "WORKSHOPS", body: "Capture ideas across the room." },
-  { tag: "04", title: "GROUP DISCUSSIONS", body: "Give every participant a voice." },
+  { tag: "01", title: "MEETINGS", body: "Keep every speaker and decision in context.", y: 25 },
+  { tag: "02", title: "CLASSROOMS", body: "Capture discussions without a single microphone at the front.", y: 35 },
+  { tag: "03", title: "WORKSHOPS", body: "Capture ideas across the room.", y: 45 },
+  { tag: "04", title: "GROUP DISCUSSIONS", body: "Give every participant a voice.", y: 55 },
 ];
 
 export default function UseCases() {
@@ -19,7 +19,7 @@ export default function UseCases() {
         </Reveal>
         <div className="mt-12 grid gap-4 sm:grid-cols-2">
           {cases.map((c, i) => (
-            <Reveal key={c.title} delay={(i % 2) * 0.08}>
+            <Reveal key={c.title} delay={(i % 2) * 0.08} y={c.y}>
               <div className="group relative overflow-hidden rounded-[28px] bg-[#111111] p-8 text-white transition-all hover:-translate-y-[3px] md:p-10 min-h-[240px] flex flex-col justify-between">
                 <div className="flex items-start justify-between">
                   <span className="font-mono text-[12px] text-white/40">{c.tag}</span>

@@ -37,7 +37,7 @@ export default function TechnologySection() {
               <div
                 key={p.id}
                 className={cn(
-                  "mb-3 rounded-2xl border bg-white p-5 transition-all",
+                  "mb-3 rounded-2xl border bg-white p-5",
                   p.highlight ? "border-[#635BFF] shadow-[0_16px_40px_rgba(99,91,255,0.15)]" : "border-[#E4E4E0]"
                 )}
               >
@@ -68,16 +68,21 @@ export default function TechnologySection() {
                     className={cn("h-full rounded-full", p.highlight ? "bg-[#635BFF]" : "bg-[#CFCFC9]")}
                   />
                 </div>
-                <div className="mt-3 flex items-center gap-[3px]">
-                  {Array.from({ length: 32 }).map((_, i) => (
-                    <motion.span
-                      key={i}
-                      className={cn("w-[3px] rounded-full", p.highlight ? "bg-[#635BFF]/70" : "bg-[#E0E0DB]")}
-                      animate={p.highlight ? { height: [4, 8 + Math.abs(Math.sin(i)) * 14, 4] } : { height: 4 }}
-                      transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.05 }}
-                      style={{ height: 4 }}
-                    />
-                  ))}
+                <div className="mt-3 flex h-[22px] items-center gap-[3px]">
+                  {Array.from({ length: 32 }).map((_, i) => {
+                    const peak = 8 + Math.abs(Math.sin(i)) * 14;
+                    return p.highlight ? (
+                      <motion.span
+                        key={i}
+                        className="w-[3px] origin-center rounded-full bg-[#635BFF]/70"
+                        animate={{ scaleY: [0.25, 1, 0.25] }}
+                        transition={{ duration: 1.6, repeat: Infinity, delay: i * 0.05 }}
+                        style={{ height: peak }}
+                      />
+                    ) : (
+                      <span key={i} className="w-[3px] rounded-full bg-[#E0E0DB]" style={{ height: 4 }} />
+                    );
+                  })}
                 </div>
               </div>
             ))}

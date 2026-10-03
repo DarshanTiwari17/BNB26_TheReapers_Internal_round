@@ -52,16 +52,20 @@ export default function ProductDemo() {
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-[2px]">
-                        {[6, 12, 8, 14, 5, 10, 7].map((h, j) => (
-                          <motion.span
-                            key={j}
-                            className="w-[2px] rounded-full bg-[#635BFF]"
-                            animate={{ height: [3, i === 1 ? h : 4, 3] }}
-                            transition={{ duration: 1.4, repeat: Infinity, delay: j * 0.1 + i * 0.2 }}
-                            style={{ height: 3 }}
-                          />
-                        ))}
+                      <div className="flex h-[14px] items-center gap-[2px]">
+                        {[6, 12, 8, 14, 5, 10, 7].map((h, j) =>
+                          i === 1 ? (
+                            <motion.span
+                              key={j}
+                              className="w-[2px] origin-center rounded-full bg-[#635BFF]"
+                              animate={{ scaleY: [0.3, 1, 0.3] }}
+                              transition={{ duration: 1.4, repeat: Infinity, delay: j * 0.1 + i * 0.2 }}
+                              style={{ height: h }}
+                            />
+                          ) : (
+                            <span key={j} className="w-[2px] rounded-full bg-[#635BFF]/40" style={{ height: 4 }} />
+                          )
+                        )}
                       </div>
                     </div>
                   ))}

@@ -9,8 +9,16 @@ const cards = [
 
 export default function PrivacySection() {
   return (
-    <section id="privacy" className="scroll-mt-20 border-t border-[#E4E4E0] bg-[#F7F7F5] py-24 md:py-32">
-      <div className="mx-auto max-w-[1400px] px-5 md:px-8">
+    <section id="privacy" className="relative scroll-mt-20 overflow-hidden border-t border-[#E4E4E0] bg-[#F7F7F5] py-24 md:py-32">
+      {/* static decorative ring — no scroll movement */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -right-[120px] top-[80px] h-[380px] w-[380px] rounded-full border border-[#E4E4E0]"
+      >
+        <div className="absolute inset-10 rounded-full border border-[#E4E4E0]/70" />
+        <div className="absolute inset-24 rounded-full bg-white/40" />
+      </div>
+      <div className="relative mx-auto max-w-[1400px] px-5 md:px-8">
         <Reveal>
           <p className="font-mono text-[12px] uppercase tracking-[0.16em] text-[#8A8A86]">Privacy</p>
           <h2 className="editorial-tight mt-4 text-[40px] font-[700] sm:text-[56px] lg:text-[72px]">Private by design.</h2>

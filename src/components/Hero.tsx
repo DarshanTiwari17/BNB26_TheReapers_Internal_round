@@ -1,13 +1,35 @@
+import { useRef } from "react";
 import { Link } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, useScroll, useTransform, useSpring } from "framer-motion";
 import { ArrowRight, ArrowDown } from "lucide-react";
 import HeroAudioVisualization from "./HeroAudioVisualization";
+import { useParallaxIntensity } from "../lib/useParallax";
 
 export default function Hero() {
+  const sectionRef = useRef<HTMLElement>(null);
+  const intensity = useParallaxIntensity();
+
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start start", "end start"],
+  });
+
+  // Hero text depth: drifts up 20–30px with a gentle fade to 0.85 as it leaves.
+  const textYRaw = useTransform(scrollYProgress, [0, 1], [0, -28 * intensity]);
+  const textY = useSpring(textYRaw, { stiffness: 100, damping: 30 });
+  const textOpacity = useTransform(scrollYProgress, [0, 0.9], [1, 0.85]);
+
+  // Visualization stays slightly behind the text.
+  const visualYRaw = useTransform(scrollYProgress, [0, 1], [0, -10 * intensity]);
+  const visualY = useSpring(visualYRaw, { stiffness: 100, damping: 30 });
+
   return (
-    <section className="relative overflow-hidden pt-[76px]">
+    <section ref={sectionRef} className="relative overflow-hidden pt-[76px]">
       <div className="mx-auto grid max-w-[1400px] items-center gap-10 px-5 pb-16 pt-10 md:px-8 lg:grid-cols-[1.05fr_0.95fr] lg:gap-4 lg:pb-20 lg:pt-14 min-h-[90vh]">
-        <div className="max-w-[720px]">
+        <motion.div
+          className="max-w-[720px]"
+          style={intensity > 0 ? { y: textY, opacity: textOpacity } : undefined}
+        >
           <motion.div
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
@@ -81,14 +103,15 @@ export default function Hero() {
               Meeting data is automatically deleted 60 minutes after the session ends.
             </p>
           </motion.div>
-        </div>
+        </motion.div>
 
         <motion.div
           initial={{ opacity: 0, scale: 0.96 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ duration: 0.8, delay: 0.2 }}
+          style={intensity > 0 ? { y: visualY } : undefined}
         >
-          <HeroAudioVisualization />
+          <HeroAudioVisualization scrollProgress={scrollYProgress} />
         </motion.div>
       </div>
 
