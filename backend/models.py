@@ -75,6 +75,7 @@ class LobbyResponse(BaseModel):
 class InvitationPreview(BaseModel):
     """Public session summary for the Join page. Contains no secrets."""
 
+    session_id: str
     session_name: str
     host_name: str
     capacity: int

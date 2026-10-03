@@ -23,6 +23,7 @@ export type JoinRequest = {
 };
 
 export type InvitationPreview = {
+  session_id: string;
   session_name: string;
   host_name: string;
   capacity: number;

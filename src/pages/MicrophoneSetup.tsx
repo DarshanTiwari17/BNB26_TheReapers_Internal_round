@@ -23,6 +23,7 @@ import {
 } from "../lib/audio";
 
 type ParticipantSession = {
+  sessionId?: string | null;
   invitationToken?: string;
   requestId?: string;
   participantId?: string | null;
@@ -307,7 +308,19 @@ export default function MicrophoneSetup() {
                     <button
                       type="button"
                       disabled={!ready}
-                      onClick={() => navigate("/roundtable")}
+                      onClick={() =>
+                        navigate("/roundtable", {
+                          state: {
+                            session: {
+                              sessionId: participant?.sessionId ?? "",
+                              participantId: participant?.participantId ?? null,
+                              participantToken: participant?.participantToken ?? null,
+                              displayName: participant?.displayName ?? "Guest",
+                              sessionName: participant?.sessionName ?? "Roundtable session",
+                            },
+                          },
+                        })
+                      }
                       className="group inline-flex min-h-[52px] w-full items-center justify-center gap-2 rounded-full bg-[#111111] px-8 py-4 text-[15px] font-semibold text-white transition-all hover:-translate-y-[1px] hover:shadow-xl disabled:cursor-not-allowed disabled:opacity-40"
                     >
                       {ready ? (

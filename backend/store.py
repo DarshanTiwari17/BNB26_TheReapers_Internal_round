@@ -151,6 +151,7 @@ class InMemorySessionStore:
         if invitation is None:
             raise ValueError("invalid_invitation")
         return InvitationPreview(
+            session_id=record.id,
             session_name=record.name,
             host_name=record.host_name,
             capacity=record.capacity,

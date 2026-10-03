@@ -197,6 +197,7 @@ export default function JoinSession() {
             sessionStorage.setItem(
               "roundtable.participantSession",
               JSON.stringify({
+                sessionId: preview?.session_id ?? null,
                 invitationToken: token,
                 requestId: status.id,
                 participantId: status.participant_id,
