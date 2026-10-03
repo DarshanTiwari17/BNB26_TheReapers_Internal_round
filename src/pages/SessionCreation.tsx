@@ -4,13 +4,7 @@ import { ArrowRight, LockKeyhole } from "lucide-react";
 import { motion } from "framer-motion";
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
-
-type HostSession = {
-  sessionId: string;
-  hostToken: string;
-  sessionName: string;
-  maximumParticipants: number;
-};
+import { createSession } from "../lib/api";
 
 export default function SessionCreation() {
   const navigate = useNavigate();
@@ -20,7 +14,7 @@ export default function SessionCreation() {
   const [creating, setCreating] = useState(false);
   const [creationError, setCreationError] = useState("");
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const name = sessionName.trim();
     const participants = Number(maximumParticipants);
@@ -36,17 +30,18 @@ export default function SessionCreation() {
 
     setCreating(true);
     try {
-      const hostTokenBytes = window.crypto.getRandomValues(new Uint8Array(32));
-      const session: HostSession = {
-        sessionId: window.crypto.randomUUID(),
-        hostToken: Array.from(hostTokenBytes, (byte) => byte.toString(16).padStart(2, "0")).join(""),
-        sessionName: name,
-        maximumParticipants: participants,
+      const created = await createSession(name, participants);
+      const session = {
+        sessionId: created.session_id,
+        hostToken: created.host_token,
+        sessionName: created.name,
+        maximumParticipants: created.capacity,
       };
+      sessionStorage.setItem("roundtable.hostSession", JSON.stringify(session));
       navigate("/host-lobby", { state: { session }, replace: true });
-    } catch {
+    } catch (error) {
+      setCreationError(error instanceof Error ? error.message : "The session could not be created. Check that the backend is running and try again.");
       setCreating(false);
-      setCreationError("A secure session could not be created in this browser. Try again in a secure context.");
     }
   }
 

@@ -5,6 +5,7 @@ import Home from "./pages/Home";
 import Placeholder from "./pages/Placeholder";
 import SessionCreation from "./pages/SessionCreation";
 import HostLobby from "./pages/HostLobby";
+import JoinSession from "./pages/JoinSession";
 
 function ScrollManager() {
   const { pathname, hash } = useLocation();
@@ -27,7 +28,8 @@ export default function App() {
       <ScrollManager />
       <Routes>
         <Route path="/" element={<Home />} />
-        <Route path="/join" element={<Placeholder title="Join Session" body="Join Session is coming soon. This placeholder route reserves the future Join Session page." />} />
+        <Route path="/join/:token" element={<JoinSession />} />
+        <Route path="/join" element={<Placeholder title="Join Session" body="Scan a host invitation QR code to join a session." />} />
         <Route path="/create-session" element={<SessionCreation />} />
         <Route path="/host-lobby" element={<HostLobby />} />
         <Route path="/roundtable" element={<Placeholder title="Live Roundtable" body="Live Roundtable is coming soon. This placeholder route reserves the future live session experience." />} />
