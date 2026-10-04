@@ -1,6 +1,11 @@
-/* Live transcription feed: local mic -> 4 s PCM windows -> backend pipeline.
+/* Live transcription feed: local mic -> rolling PCM windows -> backend pipeline.
  * Independent of WebRTC transport (which keeps carrying live audio);
  * results come back over the existing signaling socket as transcript_event.
+ *
+ * Windows are ~3 s and non-overlapping: the backend VAD splits them into
+ * speech regions, accumulates >=1.5 s of speech per participant, and only
+ * then calls Whisper — short fragments never reach inference, so captions
+ * stay reliable at ~2-3 s latency instead of hallucinating.
  */
 
 const WORKLET_CODE = `
@@ -33,7 +38,11 @@ class FeedCapture extends AudioWorkletProcessor {
 registerProcessor("rt-feed-capture", FeedCapture);
 `;
 
-const WINDOW_S = 4;
+// Stable rolling windows: speech posts ~3 s after it starts being spoken.
+// Shorter windows starve Whisper of context (hallucinations); the backend
+// VAD splits windows into speech regions and accumulates them to >=1.5 s
+// of speech before any inference call.
+const WINDOW_S = 3;
 
 export type FeedCredentials =
   | { participant_id: string; participant_token: string }

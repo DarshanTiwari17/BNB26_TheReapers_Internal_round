@@ -16,6 +16,8 @@ class AudioSegment:
     end: float
     samples: object  # numpy float32 array, set at runtime
     source: str = "live"  # "live" | "file"
+    # True when trailing silence closed the utterance (partial otherwise).
+    final: bool = True
 
 
 @dataclass
@@ -48,6 +50,8 @@ class FusedEntry:
     source_participant_id: str
     ambiguous: bool = False
     language: str = "unknown"
+    # False = utterance may continue (UI updates text in place).
+    is_final: bool = True
 
     def to_dict(self) -> dict:
         return {
@@ -60,6 +64,7 @@ class FusedEntry:
             "source_participant_id": self.source_participant_id,
             "ambiguous": self.ambiguous,
             "language": self.language,
+            "isFinal": self.is_final,
         }
 
 

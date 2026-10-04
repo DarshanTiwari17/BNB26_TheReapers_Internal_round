@@ -21,6 +21,7 @@ class FusionStore:
         source_participant_id: str,
         ambiguous: bool = False,
         language: str = "unknown",
+        is_final: bool = True,
     ) -> FusedEntry | None:
         text = text.strip()
         if not text:
@@ -43,6 +44,9 @@ class FusionStore:
             best.confidence = round((best.confidence + confidence) / 2, 3)
             if best.language in ("unknown", "") and language not in ("unknown", ""):
                 best.language = language
+            # Finality follows the latest fragment: an utterance stays
+            # partial until a fragment ends in silence.
+            best.is_final = is_final
             return best
         entry = FusedEntry(
             id=f"t-{uuid.uuid4().hex[:8]}",
@@ -54,6 +58,7 @@ class FusionStore:
             source_participant_id=source_participant_id,
             ambiguous=ambiguous,
             language=language,
+            is_final=is_final,
         )
         self.entries.append(entry)
         self.entries.sort(key=lambda e: (e.start, e.end))

@@ -21,6 +21,7 @@ export type FusedTranscriptEntry = {
   source_participant_id: string;
   ambiguous: boolean;
   language?: string;
+  isFinal?: boolean;
 };
 
 type SessionRole = "host" | "participant";
@@ -240,13 +241,23 @@ export default function RoundtableSession() {
   const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
   const [transcriptEntries, setTranscriptEntries] = useState<FusedTranscriptEntry[]>([]);
 
+  // Upsert by id: partial results update the same row in place instead of
+  // appending duplicate lines.
   const mergeTranscriptEntries = (incoming: FusedTranscriptEntry[]) => {
     if (!incoming.length) return;
     setTranscriptEntries((current) => {
-      const seen = new Set(current.map((e) => e.id));
-      const fresh = incoming.filter((e) => e.id && !seen.has(e.id) && e.text.trim());
-      if (!fresh.length) return current;
-      return [...current, ...fresh]
+      const byId = new Map(current.map((e) => [e.id, e]));
+      let changed = false;
+      for (const e of incoming) {
+        if (!e.id || !e.text.trim()) continue;
+        const prev = byId.get(e.id);
+        if (!prev || prev.text !== e.text || prev.isFinal !== e.isFinal || prev.end !== e.end) {
+          byId.set(e.id, e);
+          changed = true;
+        }
+      }
+      if (!changed) return current;
+      return [...byId.values()]
         .sort((a, b) => a.start - b.start || a.end - b.end)
         .slice(-200);
     });
@@ -823,6 +834,9 @@ export default function RoundtableSession() {
                       <div key={entry.id} className="rounded-2xl bg-[#F7F7F5] px-4 py-3">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#635BFF]">
                           [{mm}:{ss}] {speakerName}
+                          {entry.isFinal === false && (
+                            <span className="ml-1.5 inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-[#635BFF]" aria-label="Updating" />
+                          )}
                         </p>
                         <p className="mt-1 text-[14px] leading-relaxed text-[#111]">“{entry.text}”</p>
                       </div>

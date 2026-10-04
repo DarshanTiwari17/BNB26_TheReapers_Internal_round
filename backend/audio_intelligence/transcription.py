@@ -21,6 +21,10 @@ _model = None
 _model_key: tuple | None = None
 _lock = threading.Lock()
 _load_error: str | None = None
+# At most 2 concurrent Whisper inferences: transcribing is the expensive
+# step, and unbounded parallel jobs would thrash GPU/CPU. transcribe()
+# always runs inside a worker thread, so a blocking acquire is safe.
+_infer_slots = threading.Semaphore(2)
 
 
 def resolve_device() -> str:
@@ -94,7 +98,9 @@ def transcribe(samples: np.ndarray) -> tuple[str, float, str] | None:
             "vad_filter": False,  # we already ran our own VAD
             "condition_on_previous_text": False,  # segments are independent; avoids cross-speaker repetition
         }
-        segments, _info = model.transcribe(samples.astype(np.float32), **kwargs)
+        segments, _info = None, None
+        with _infer_slots:
+            segments, _info = model.transcribe(samples.astype(np.float32), **kwargs)
         texts: list[str] = []
         logprobs: list[float] = []
         for seg in segments:

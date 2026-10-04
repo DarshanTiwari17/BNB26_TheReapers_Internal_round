@@ -100,6 +100,10 @@ check("different speaker separate entry", len(store.ordered()) == 3)
 store.add("P-1", 22.5, 24.0, "one more.", 0.8, "P-1", language="en")
 merged = [e for e in store.ordered() if e.start == 20.0][0]
 check("language preserved through merge", merged.language == "en")
+check("partial/final flags", merged.is_final is True)
+part = store.add("P-2", 30.0, 31.0, "partial thought", 0.7, "P-2", is_final=False)
+check("partial entry flagged", part is not None and part.is_final is False)
+check("to_dict carries isFinal", part.to_dict()["isFinal"] is False)
 
 print("== attribution ==")
 voter = attribution.TemporalVoter()
@@ -120,6 +124,25 @@ async def run_pipe():
     check("silence ingests to nothing", out_silence == [])
     out_tone = await pipe.ingest("s1", "P-1", tone(seconds=4.0), 4.0)
     print(f"  info: tone produced {len(out_tone)} entries (whisper-dependent)")
+    check("transcript fetchable", isinstance(pipe.transcript("s1"), list))
+    # Accumulator: sub-threshold fragments buffer, never reach Whisper alone.
+    st = pipe.for_session("s1")
+    seg_a = AudioSegment("P-9", 0.0, 0.8, tone(seconds=0.8), final=False)
+    seg_b = AudioSegment("P-9", 0.8, 1.6, tone(seconds=0.8), final=True)
+    check("short fragment held, not emitted", st.accumulate("P-9", [seg_a]) == [])
+    combined = st.accumulate("P-9", [seg_b])
+    check("fragments combine past MIN_SPEECH_S", len(combined) == 1)
+    check("combined unit long enough", combined[0].end - combined[0].start >= 1.5)
+    check("short blip alone never emitted", st.accumulate("P-9", [seg_a]) == [])
+    st.pending.pop("P-9", None)
+    # Silence after speech finalizes the open entry (no endless partials).
+    e = st.fusion.add("P-1", 30.0, 32.0, "Trailing thought", 0.8, "P-1", is_final=False)
+    assert e is not None
+    st.last_voice["P-1"] = 32.0
+    flipped = await pipe.ingest("s1", "P-1", np.zeros(int(SR * 1.5), dtype=np.float32), 40.0)
+    check("quiet window finalizes open entry", any(x.id == e.id and x.is_final for x in flipped))
+    reno = await pipe.ingest("s1", "P-1", np.zeros(int(SR * 1.5), dtype=np.float32), 41.5)
+    check("finalized entry not re-emitted", reno == [])
     pipe.remove_participant("s1", "P-1")
     check("transcript fetchable", isinstance(pipe.transcript("s1"), list))
 

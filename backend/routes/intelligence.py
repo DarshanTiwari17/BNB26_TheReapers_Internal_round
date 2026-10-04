@@ -9,7 +9,7 @@ from ..deps import authorized_session, domain_error, store
 
 router = APIRouter(tags=["intelligence"])
 
-MAX_SEGMENT_BYTES = 2 * 1024 * 1024  # ~4 s float32 16 kHz is ~256 KB
+MAX_SEGMENT_BYTES = 2 * 1024 * 1024  # 3 s float32 16 kHz is ~192 KB; cap far above
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 
 
@@ -27,7 +27,7 @@ def _resolve_speaker(record, participant_id: str | None, participant_token: str 
 
 @router.post("/sessions/{session_id}/audio-segments")
 async def post_audio_segment(session_id: str, request: Request, payload: dict):
-    """Ingest one ~4 s PCM window. Body: participant/host creds + t0 + pcm_b64."""
+    """Ingest one ~3 s PCM window. Body: participant/host creds + t0 + pcm_b64."""
     record = store.get(session_id)
     if record is None:
         raise HTTPException(status_code=404, detail={"code": "session_not_found", "message": "Session not found."})
