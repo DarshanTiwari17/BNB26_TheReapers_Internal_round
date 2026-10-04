@@ -5,8 +5,23 @@ import { Mic, MicOff, Radio, RefreshCw, UserCheck, UserRound, UserX, Users, Volu
 import Navbar from "../components/Navbar";
 import Footer from "../components/Footer";
 import AudioLevelMeter from "../components/mic/AudioLevelMeter";
-import { approveJoinRequest, getLobby, rejectJoinRequest, type JoinRequest } from "../lib/api";
+import { approveJoinRequest, getLobby, rejectJoinRequest, wsBaseUrl, type JoinRequest } from "../lib/api";
+import { apiBaseUrl } from "../lib/api";
 import { useSessionAudio } from "../lib/useSessionAudio";
+import { startTranscriptionFeed } from "../lib/transcriptionFeed";
+import type { ParticipantAudioStreamManager } from "../lib/participantAudio";
+
+export type FusedTranscriptEntry = {
+  id: string;
+  start: number;
+  end: number;
+  speaker_id: string;
+  text: string;
+  confidence: number;
+  source_participant_id: string;
+  ambiguous: boolean;
+  language?: string;
+};
 
 type SessionRole = "host" | "participant";
 type ConnectionState = "connecting" | "connected" | "disconnected" | "reconnecting";
@@ -81,6 +96,58 @@ function RemoteAudio({
   }, [peerId, stream, audioElementsRef, onPlaybackBlocked]);
 
   return <audio ref={audioRef} autoPlay playsInline className="sr-only" aria-label={`${peerId} live audio`} />;
+}
+
+/* Developer-only stream-identity diagnostic. Reads the central registry
+ * (re-rendered via `version`) — never the playback elements. */
+function StreamDiagnostics({
+  manager,
+  version,
+  localParticipantId,
+}: {
+  manager: ParticipantAudioStreamManager;
+  version: number;
+  localParticipantId: string;
+}) {
+  void version;
+  const ids = manager.participantIds();
+  return (
+    <section
+      aria-label="Audio stream diagnostics"
+      className="rounded-[24px] border border-dashed border-[#E4E4E0] bg-white p-6"
+    >
+      <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#8A8A86]">
+        Stream diagnostics · {manager.size} stream{manager.size === 1 ? "" : "s"}
+      </p>
+      <div className="mt-4 space-y-2">
+        {ids.length === 0 && (
+          <p className="rounded-xl bg-[#F7F7F5] px-4 py-3 font-mono text-[12px] text-[#8A8A86]">
+            No participant streams registered yet.
+          </p>
+        )}
+        {ids.map((id) => {
+          const stream = manager.getStream(id);
+          const tracks = manager.getTracks(id);
+          const liveTracks = tracks.filter((track) => track.readyState === "live").length;
+          return (
+            <div key={id} className="rounded-xl bg-[#F7F7F5] px-4 py-3 font-mono text-[12px] text-[#333]">
+              <p>
+                Participant: <span className="font-semibold text-[#111]">{id}</span>
+                {id === localParticipantId && <span className="text-[#8A8A86]"> (local)</span>}
+              </p>
+              <p>Stream: {stream ? "available" : "missing"}</p>
+              <p>Tracks: {tracks.length}</p>
+              <p>Track kind: {tracks.map((track) => track.kind).join(", ") || "—"}</p>
+              <p>
+                Track state:{" "}
+                {tracks.length === 0 ? "—" : `${liveTracks} live / ${tracks.length - liveTracks} ended`}
+              </p>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
 }
 
 function readStoredHostSession(): { sessionId: string; hostToken: string; sessionName: string } | null {
@@ -171,6 +238,19 @@ export default function RoundtableSession() {
 
   const [participants, setParticipants] = useState<LiveParticipant[]>([]);
   const [sessionEvents, setSessionEvents] = useState<SessionEvent[]>([]);
+  const [transcriptEntries, setTranscriptEntries] = useState<FusedTranscriptEntry[]>([]);
+
+  const mergeTranscriptEntries = (incoming: FusedTranscriptEntry[]) => {
+    if (!incoming.length) return;
+    setTranscriptEntries((current) => {
+      const seen = new Set(current.map((e) => e.id));
+      const fresh = incoming.filter((e) => e.id && !seen.has(e.id) && e.text.trim());
+      if (!fresh.length) return current;
+      return [...current, ...fresh]
+        .sort((a, b) => a.start - b.start || a.end - b.end)
+        .slice(-200);
+    });
+  };
   const [socketState, setSocketState] = useState<ConnectionState>("connecting");
   const [socket, setSocket] = useState<WebSocket | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -233,6 +313,52 @@ export default function RoundtableSession() {
     }
     previousParticipantIdsRef.current = currentIds;
   }, [participants]);
+
+  // Initial transcript snapshot once connected (covers entries made before join).
+  useEffect(() => {
+    if (socketState !== "connected" || !sessionId) return;
+    let active = true;
+    const params = new URLSearchParams();
+    if (session?.hostToken) params.set("host_token", session.hostToken);
+    if (session?.participantId && session?.participantToken) {
+      params.set("participant_id", session.participantId);
+      params.set("participant_token", session.participantToken);
+    }
+    void fetch(`${apiBaseUrl()}/api/sessions/${encodeURIComponent(sessionId)}/transcript?${params.toString()}`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (active && body && Array.isArray(body.entries)) {
+          mergeTranscriptEntries(body.entries as FusedTranscriptEntry[]);
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [socketState, sessionId]);
+
+  // Live feed: this device's own mic -> backend pipeline in ~4 s windows.
+  // Independent of WebRTC transport; results return via transcript_event.
+  useEffect(() => {
+    const stream = audio.localStream;
+    if (!stream || !sessionId || audio.audioState !== "connected") return;
+    const credentials = session?.hostToken
+      ? { host_token: session.hostToken }
+      : session?.participantId && session?.participantToken
+        ? { participant_id: session.participantId, participant_token: session.participantToken }
+        : null;
+    if (!credentials) return;
+    const stop = startTranscriptionFeed({
+      stream,
+      sessionId,
+      credentials,
+      apiBase: apiBaseUrl(),
+    });
+    return () => {
+      stop();
+    };
+  }, [audio.localStream, audio.audioState, sessionId, session?.hostToken, session?.participantId, session?.participantToken]);
 
   useEffect(() => {
     const activeIds = new Set(participants.map((participant) => participant.id));
@@ -304,8 +430,9 @@ export default function RoundtableSession() {
 
     const connect = () => {
       if (stopped) return;
-      const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
-      const base = (import.meta.env.VITE_WS_URL ?? `${wsProtocol}://${window.location.host}`).replace(/\/$/, "");
+      // Direct to the FastAPI backend (wsBaseUrl); VITE_WS_URL /
+      // VITE_API_URL override for remote. Never routed via Vite proxy.
+      const base = wsBaseUrl();
       const params = new URLSearchParams();
 
       if (role === "host" && session?.hostToken) {
@@ -351,6 +478,10 @@ export default function RoundtableSession() {
             setSocketState("connected");
           }
 
+          if (payload.type === "transcript_event" && Array.isArray((payload as { entries?: unknown }).entries)) {
+            mergeTranscriptEntries((payload as { entries: FusedTranscriptEntry[] }).entries);
+          }
+
           if (payload.type === "peer_signal" && payload.from_id && payload.signal_type && payload.signal) {
             audio.handleSignal(payload as PeerSignalMessage);
           }
@@ -359,12 +490,25 @@ export default function RoundtableSession() {
         }
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event: CloseEvent) => {
         if (wsRef.current === ws) {
           wsRef.current = null;
           setSocket(null);
         }
         if (stopped) return;
+        // Fatal closes must not retry forever: the session is gone (4404,
+        // e.g. backend restarted and dropped its in-memory store) or the
+        // credentials are invalid (4401). Anything else is transient.
+        if (event.code === 4404) {
+          setSocketState("disconnected");
+          setError("This Roundtable session no longer exists on the server. Create a new session or rejoin with a fresh invitation.");
+          return;
+        }
+        if (event.code === 4401) {
+          setSocketState("disconnected");
+          setError("Your access to this session is no longer valid. Rejoin with a fresh invitation.");
+          return;
+        }
         setSocketState("reconnecting");
         setError("Connection lost. Reconnecting to the Roundtable session...");
         if (reconnectTimerRef.current) window.clearTimeout(reconnectTimerRef.current);
@@ -658,14 +802,48 @@ export default function RoundtableSession() {
                 </div>
               </section>
 
+              <section aria-label="Live transcript" className="rounded-[24px] border border-[#E4E4E0] bg-white p-6 shadow-[0_16px_48px_rgba(0,0,0,0.04)]">
+                <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#8A8A86]">Live transcript</p>
+                <div className="mt-4 max-h-72 space-y-2 overflow-y-auto" role="log" aria-label="Live transcript">
+                  {transcriptEntries.length === 0 && (
+                    <p className="rounded-xl border border-dashed border-[#E4E4E0] px-4 py-4 text-[13px] text-[#8A8A86]">
+                      Captions will appear here as people speak.
+                    </p>
+                  )}
+                  {transcriptEntries.map((entry) => {
+                    const speakerName = entry.speaker_id === "unknown"
+                      ? "Unknown"
+                      : entry.speaker_id === "multiple"
+                        ? "Multiple speakers"
+                        : participants.find((p) => p.id === entry.speaker_id)?.display_name
+                          ?? (entry.speaker_id === localParticipantKey ? (session?.displayName ?? "You") : "Participant");
+                    const mm = Math.floor(entry.start / 60).toString().padStart(2, "0");
+                    const ss = Math.floor(entry.start % 60).toString().padStart(2, "0");
+                    return (
+                      <div key={entry.id} className="rounded-2xl bg-[#F7F7F5] px-4 py-3">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[#635BFF]">
+                          [{mm}:{ss}] {speakerName}
+                        </p>
+                        <p className="mt-1 text-[14px] leading-relaxed text-[#111]">“{entry.text}”</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+
+              <StreamDiagnostics
+                manager={audio.streamManager}
+                version={audio.streamVersion}
+                localParticipantId={localParticipantKey}
+              />
+
               {role === "host" && (
                 <section className="rounded-[24px] border border-[#E4E4E0] bg-white p-6 shadow-[0_16px_48px_rgba(0,0,0,0.04)]">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="font-mono text-[11px] uppercase tracking-[0.16em] text-[#8A8A86]">Host controls</p>
                       <h2 className="mt-2 text-[18px] font-bold">Join requests</h2>
-                    </div>
-                    <span className="grid h-8 min-w-8 place-items-center rounded-full bg-[#F7F7F5] px-2 font-mono text-[12px]">{pendingRequests.length}</span>
+                    </div>                    <span className="grid h-8 min-w-8 place-items-center rounded-full bg-[#F7F7F5] px-2 font-mono text-[12px]">{pendingRequests.length}</span>
                   </div>
                   <div className="mt-4 space-y-2">
                     {pendingRequests.length === 0 ? (

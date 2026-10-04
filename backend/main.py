@@ -1,13 +1,48 @@
+import asyncio
 import os
+from contextlib import asynccontextmanager
+
+try:
+    from dotenv import load_dotenv
+
+    load_dotenv()  # must run before module-level os.getenv reads below
+except ImportError:
+    pass
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from .deps import store
 from .realtime import RealtimeSessionManager
-from .routes import invitations, participants, sessions
+from .routes import intelligence, invitations, participants, sessions
 
-app = FastAPI(title="Roundtable API", version="0.1.0")
+
+async def _warmup_intelligence() -> None:
+    """Preload Silero + Whisper in the background (non-blocking server boot).
+
+    Lazy loading remains as fallback, so a failed warmup never breaks
+    startup — but without this, the first speech segment would pay the
+    full model download + load cost as user-visible delay.
+    """
+    try:
+        from .audio_intelligence import transcription
+        from .audio_intelligence.vad import SileroVAD
+
+        await asyncio.to_thread(transcription.warmup)
+        vad = SileroVAD()
+        await asyncio.to_thread(lambda: vad.available)
+        print(f"[intelligence] warmup done (silero={vad.available})", flush=True)
+    except Exception as exc:
+        print(f"[intelligence] warmup failed, lazy fallback active: {exc}", flush=True)
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    asyncio.get_event_loop().create_task(_warmup_intelligence())
+    yield
+
+
+app = FastAPI(title="Roundtable API", version="0.1.0", lifespan=lifespan)
 configured_origins = [
     origin.strip()
     for origin in os.getenv("CORS_ORIGINS", "").split(",")
@@ -23,10 +58,12 @@ app.add_middleware(
 )
 
 realtime = RealtimeSessionManager(store)
+app.state.realtime = realtime
 
 app.include_router(sessions.router, prefix="/api", dependencies=[])
 app.include_router(invitations.router, prefix="/api")
 app.include_router(participants.router, prefix="/api")
+app.include_router(intelligence.router, prefix="/api")
 
 
 @app.get("/health")

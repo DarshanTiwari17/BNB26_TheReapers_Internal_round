@@ -23,6 +23,8 @@ def domain_error(error: ValueError) -> HTTPException:
         "invalid_invitation": (404, "Invitation not found."),
         "invitation_invalidated": (410, "This invitation has been invalidated."),
         "invitation_expired": (410, "This invitation has expired."),
+        "invalid_host_token": (401, "Host token is invalid."),
+        "invalid_participant_token": (401, "Participant token is invalid."),
         "session_locked": (423, "This session is locked."),
         "session_full": (409, "This session is full."),
         "session_already_started": (409, "This session has already started."),

@@ -63,6 +63,30 @@ export type ApiError = Error & { code?: string; status?: number };
 
 const API_BASE = (import.meta.env.VITE_API_URL ?? "").replace(/\/$/, "");
 
+/** Effective HTTP backend base. Empty means same-origin (Vite proxies /api). */
+export function apiBaseUrl(): string {
+  return API_BASE;
+}
+
+/** WebSocket backend base. Order: explicit VITE_WS_URL, then the HTTP API
+ *  base with its scheme swapped (https -> wss), else a DIRECT backend
+ *  connection in local development (ws://hostname:8000).
+ *
+ *  Signaling deliberately bypasses the Vite dev proxy: proxying adds a
+ *  middleman TCP hop whose aborted sockets surface as
+ *  "[vite] ws proxy socket error: ECONNABORTED" whenever the page
+ *  refreshes, StrictMode remounts, or a socket is replaced. The proxy
+ *  entry stays only as a fallback for https pages without backend TLS. */
+export function wsBaseUrl(): string {
+  const override = ((import.meta.env.VITE_WS_URL as string | undefined) ?? "").replace(/\/$/, "");
+  if (override) return override;
+  if (API_BASE) return API_BASE.replace(/^http/, "ws");
+  if (typeof window !== "undefined" && window.location.protocol === "https:") {
+    return `wss://${window.location.host}`;
+  }
+  return `ws://${typeof window !== "undefined" ? window.location.hostname : "127.0.0.1"}:8000`;
+}
+
 async function request<T>(path: string, options: RequestInit = {}, hostToken?: string): Promise<T> {
   const headers = new Headers(options.headers);
   headers.set("Content-Type", "application/json");

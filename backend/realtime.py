@@ -64,7 +64,36 @@ class RealtimeSessionManager:
 
     async def accept(self, websocket: WebSocket, session_id: str, host_token: str | None = None, participant_id: str | None = None, participant_token: str | None = None) -> None:
         await websocket.accept()
-        metadata = self._validate_host(session_id, host_token) if host_token else self._validate_participant(session_id, participant_id, participant_token)
+        role = "host" if host_token else "participant"
+        # Safe diagnostics only: presence of credentials, never their values.
+        print(
+            f"[WS AUTH ATTEMPT] session_id={session_id} role={role} "
+            f"credential_present={bool(host_token or (participant_id and participant_token))}",
+            flush=True,
+        )
+        try:
+            metadata = self._validate_host(session_id, host_token) if host_token else self._validate_participant(session_id, participant_id, participant_token)
+        except HTTPException as validation_error:
+            # An HTTP response can never be sent on an accepted websocket;
+            # close with an app code so clients can tell fatal from transient.
+            status = validation_error.status_code
+            code = 4404 if status == 404 else 4401
+            detail = validation_error.detail if isinstance(validation_error.detail, dict) else {}
+            print(
+                f"[WS AUTH FAILURE] session_id={session_id} role={role} "
+                f"reason={detail.get('code', 'rejected') if isinstance(detail, dict) else 'rejected'}",
+                flush=True,
+            )
+            try:
+                await websocket.close(code=code)
+            except Exception:
+                pass
+            raise WebSocketDisconnect(code=code)
+        print(
+            f"[WS AUTH SUCCESS] session_id={session_id} role={metadata['role']} "
+            f"id={metadata['participant_id'] or 'host'}",
+            flush=True,
+        )
         connection = SessionConnection(
             session_id=session_id,
             role=metadata["role"],
@@ -108,6 +137,10 @@ class RealtimeSessionManager:
             "participants": self._snapshot(session_id),
             "updated_at": time.time(),
         }
+        await self.broadcast_event(session_id, payload)
+
+    async def broadcast_event(self, session_id: str, payload: dict[str, Any]) -> None:
+        """Send a control/result event (never raw audio) to a session."""
         for connection in list(self._connections.get(session_id, {}).values()):
             try:
                 await connection.websocket.send_json(payload)
@@ -116,8 +149,13 @@ class RealtimeSessionManager:
 
     async def disconnect(self, session_id: str, websocket: WebSocket) -> None:
         bucket = self._connections.get(session_id, {})
-        if websocket in bucket:
-            del bucket[websocket]
+        removed = bucket.pop(websocket, None)
+        if removed is not None:
+            print(
+                f"[WS DISCONNECT] session_id={session_id} role={removed.role} "
+                f"id={removed.participant_id or 'host'}",
+                flush=True,
+            )
         if not bucket:
             self._connections.pop(session_id, None)
         if websocket.application_state.name == "CONNECTED":
@@ -184,7 +222,11 @@ class RealtimeSessionManager:
             await self.broadcast(session_id)
 
     async def handle_websocket(self, websocket: WebSocket, session_id: str, host_token: str | None = None, participant_id: str | None = None, participant_token: str | None = None) -> None:
-        await self.accept(websocket, session_id, host_token=host_token, participant_id=participant_id, participant_token=participant_token)
+        try:
+            await self.accept(websocket, session_id, host_token=host_token, participant_id=participant_id, participant_token=participant_token)
+        except WebSocketDisconnect:
+            # Rejected during accept (socket already closed with 4401/4404).
+            return
         try:
             while True:
                 raw = await websocket.receive_text()

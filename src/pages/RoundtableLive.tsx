@@ -20,6 +20,7 @@ import {
   stopStream,
   type LevelMonitor,
 } from "../lib/audio";
+import { wsBaseUrl } from "../lib/api";
 
 type HostSession = {
   sessionId: string;
@@ -133,16 +134,26 @@ export default function RoundtableLive() {
     if (finalSession.hostToken) params.set("host_token", finalSession.hostToken);
     if (finalSession.displayName) params.set("display_name", finalSession.displayName);
 
-    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(`${protocol}://${window.location.hostname}:8000/ws/session/${finalSession.sessionId}?${params.toString()}`);
+    const ws = new WebSocket(`${wsBaseUrl()}/ws/sessions/${finalSession.sessionId}?${params.toString()}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
       setWsStatus("connected");
     };
 
-    ws.onclose = () => {
-      setWsStatus("disconnected");
+    ws.onclose = (event: CloseEvent) => {
+      // Auth rejections are final: 4404 = unknown session (e.g. backend
+      // restarted and dropped its in-memory store), 4401 = bad credentials.
+      // Anything else is transient (see ws.onerror for the retry message).
+      if (event.code === 4404) {
+        setWsStatus("disconnected");
+        setRoomError("This session no longer exists on the server. Create a new session or rejoin with a fresh invitation.");
+      } else if (event.code === 4401) {
+        setWsStatus("disconnected");
+        setRoomError("Your access to this session is no longer valid. Rejoin with a fresh invitation.");
+      } else {
+        setWsStatus("disconnected");
+      }
     };
 
     ws.onerror = () => {

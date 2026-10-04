@@ -6,6 +6,7 @@ import {
   stopStream,
   type LevelMonitor,
 } from "./audio";
+import { ParticipantAudioStreamManager } from "./participantAudio";
 
 type SessionParticipant = {
   id: string;
@@ -38,6 +39,8 @@ export function useSessionAudio(
   const [inputDevices, setInputDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState("");
   const [remoteStreams, setRemoteStreams] = useState<Record<string, MediaStream>>({});
+  const [localStream, setLocalStream] = useState<MediaStream | null>(null);
+  const [streamVersion, setStreamVersion] = useState(0);
   const [peerStates, setPeerStates] = useState<Record<string, RTCPeerConnectionState>>({});
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [speakingPeerIds, setSpeakingPeerIds] = useState<string[]>([]);
@@ -49,6 +52,13 @@ export function useSessionAudio(
   const monitorRef = useRef<LevelMonitor | null>(null);
   const remoteMonitorsRef = useRef(new Map<string, LevelMonitor>());
   const peerConnectionsRef = useRef(new Map<string, RTCPeerConnection>());
+  // Central participantId -> MediaStream registry. The WebRTC layer writes
+  // here; the future intelligence layer reads here. Never mixed, never keyed
+  // by display name.
+  const streamManagerRef = useRef<ParticipantAudioStreamManager | null>(null);
+  if (!streamManagerRef.current) {
+    streamManagerRef.current = new ParticipantAudioStreamManager();
+  }
   const pendingCandidatesRef = useRef(new Map<string, RTCIceCandidateInit[]>());
   const pendingSignalsRef = useRef<PeerSignal[]>([]);
   const offeredPeersRef = useRef(new Set<string>());
@@ -83,6 +93,8 @@ export function useSessionAudio(
     }
   };
 
+  const bumpStreams = () => setStreamVersion((version) => version + 1);
+
   const closePeer = (peerId: string) => {
     const peer = peerConnectionsRef.current.get(peerId);
     if (peer) {
@@ -97,6 +109,8 @@ export function useSessionAudio(
     remoteLevelsRef.current.delete(peerId);
     pendingCandidatesRef.current.delete(peerId);
     offeredPeersRef.current.delete(peerId);
+    streamManagerRef.current?.removeStream(peerId);
+    bumpStreams();
     setRemoteStreams((existing) => {
       if (!(peerId in existing)) return existing;
       const next = { ...existing };
@@ -122,6 +136,8 @@ export function useSessionAudio(
       if (event.candidate) sendSignal(participant.id, "candidate", event.candidate.toJSON());
     };
     peer.ontrack = (event) => {
+      // The peer connection is created per participant, so the arriving
+      // track belongs to that participantId — never inferred from audio.
       const remoteStream = event.streams[0] ?? new MediaStream([event.track]);
       remoteMonitorsRef.current.get(participant.id)?.dispose();
       try {
@@ -130,6 +146,8 @@ export function useSessionAudio(
         remoteMonitorsRef.current.delete(participant.id);
       }
       setRemoteStreams((existingStreams) => ({ ...existingStreams, [participant.id]: remoteStream }));
+      streamManagerRef.current?.setStream(participant.id, remoteStream, false);
+      bumpStreams();
     };
     peer.onconnectionstatechange = () => {
       setPeerStates((existingStates) => ({ ...existingStates, [participant.id]: peer.connectionState }));
@@ -235,6 +253,9 @@ export function useSessionAudio(
         }
         streamRef.current = stream;
         monitorRef.current = createLevelMonitor(stream);
+        streamManagerRef.current?.setStream(localParticipantIdRef.current, stream, true);
+        setLocalStream(stream);
+        bumpStreams();
         audioReadyRef.current = true;
         setAudioState("connected");
         setAudioError(null);
@@ -306,6 +327,9 @@ export function useSessionAudio(
       monitorRef.current = null;
       stopStream(streamRef.current);
       streamRef.current = null;
+      streamManagerRef.current?.clearAllStreams();
+      setLocalStream(null);
+      bumpStreams();
       setRemoteStreams({});
       setPeerStates({});
       localLevelRef.current = 0;
@@ -346,6 +370,9 @@ export function useSessionAudio(
       stopStream(streamRef.current);
       streamRef.current = nextStream;
       monitorRef.current = createLevelMonitor(nextStream);
+      streamManagerRef.current?.setStream(localParticipantIdRef.current, nextStream, true);
+      setLocalStream(nextStream);
+      bumpStreams();
       nextTrack.onended = () => {
         setAudioState("disconnected");
         setAudioError("Microphone disconnected. Reconnect it to send audio.");
@@ -374,6 +401,9 @@ export function useSessionAudio(
     switchInput,
     remoteStreams,
     peerStates,
+    localStream,
+    streamVersion,
+    streamManager: streamManagerRef.current as ParticipantAudioStreamManager,
     localSpeaking,
     speakingPeerIds,
     localLevelRef,
