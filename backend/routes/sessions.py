@@ -2,11 +2,21 @@ from fastapi import APIRouter, Header, HTTPException, Request
 
 from ..deps import authorized_session, domain_error, host_token_header, store
 from ..models import CreateSessionRequest, LobbyResponse, SessionCredentials
+import os
 
 router = APIRouter(tags=["sessions"])
 
 
 def frontend_origin(request: Request) -> str:
+    """Base URL baked into invitation/QR links.
+
+    FRONTEND_URL wins when set (remote testing: the public HTTPS frontend),
+    so phones opening the QR never get a localhost link. Otherwise falls
+    back to the request Origin (local dev).
+    """
+    configured = os.getenv("FRONTEND_URL", "").strip().rstrip("/")
+    if configured:
+        return configured
     return request.headers.get("origin") or "http://localhost:5173"
 
 

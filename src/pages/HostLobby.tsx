@@ -27,6 +27,7 @@ import {
   type Invitation,
   type Lobby,
   lockSession,
+  publicInvitationUrl,
   regenerateInvitation,
   rejectJoinRequest,
   removeParticipant,
@@ -162,7 +163,7 @@ export default function HostLobby() {
   async function copyLink() {
     if (!invitation || invitationExpired) return;
     try {
-      await navigator.clipboard.writeText(invitation.invitation_url);
+      await navigator.clipboard.writeText(publicInvitationUrl(invitation.invitation_url));
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
@@ -173,7 +174,7 @@ export default function HostLobby() {
   async function shareLink() {
     if (!invitation || invitationExpired) return;
     if (navigator.share) {
-      await navigator.share({ title: session!.sessionName, text: "Join my Roundtable session", url: invitation.invitation_url });
+      await navigator.share({ title: session!.sessionName, text: "Join my Roundtable session", url: publicInvitationUrl(invitation.invitation_url) });
     } else {
       await copyLink();
     }
@@ -231,7 +232,7 @@ export default function HostLobby() {
 
                 <div className="mt-7 flex flex-col items-center rounded-2xl border border-[#E4E4E0] bg-[#F7F7F5] px-5 py-7">
                   {invitation && !invitationExpired ? (
-                    <QRCodeSVG value={invitation.invitation_url} size={220} bgColor="#FFFFFF" fgColor="#111111" level="M" includeMargin />
+                    <QRCodeSVG value={publicInvitationUrl(invitation.invitation_url)} size={220} bgColor="#FFFFFF" fgColor="#111111" level="M" includeMargin />
                   ) : (
                     <div className="grid h-[220px] w-[220px] place-items-center border border-dashed border-[#C9C9C4] bg-white text-center">
                       <div><RefreshCw className="mx-auto h-7 w-7 text-[#635BFF]" /><p className="mt-3 text-[14px] font-semibold">QR expired</p><p className="mt-1 text-[12px] text-[#8A8A86]">Generate a new invitation.</p></div>
@@ -240,7 +241,7 @@ export default function HostLobby() {
                   <p className={`mt-5 font-mono text-[12px] uppercase tracking-[0.12em] ${invitationExpired ? "text-[#635BFF]" : "text-[#666]"}`}>{invitationLabel}</p>
                   <div className="mt-3 flex w-full max-w-[480px] items-center gap-2 rounded-xl border border-[#E4E4E0] bg-white px-3 py-2">
                     <ExternalLink className="h-4 w-4 shrink-0 text-[#8A8A86]" />
-                    <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[#666]">{invitation?.invitation_url ?? "No active invitation"}</span>
+                    <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[#666]">{invitation ? publicInvitationUrl(invitation.invitation_url) : "No active invitation"}</span>
                   </div>
                 </div>
 

@@ -441,8 +441,9 @@ export default function RoundtableSession() {
 
     const connect = () => {
       if (stopped) return;
-      // Direct to the FastAPI backend (wsBaseUrl); VITE_WS_URL /
-      // VITE_API_URL override for remote. Never routed via Vite proxy.
+      // Same-origin (wsBaseUrl): page origin serves the app; Vite dev proxy
+      // forwards /ws to FastAPI. VITE_WS_URL / VITE_API_URL override for
+      // split deployments.
       const base = wsBaseUrl();
       const params = new URLSearchParams();
 

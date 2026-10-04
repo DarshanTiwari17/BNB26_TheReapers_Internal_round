@@ -69,22 +69,33 @@ export function apiBaseUrl(): string {
 }
 
 /** WebSocket backend base. Order: explicit VITE_WS_URL, then the HTTP API
- *  base with its scheme swapped (https -> wss), else a DIRECT backend
- *  connection in local development (ws://hostname:8000).
- *
- *  Signaling deliberately bypasses the Vite dev proxy: proxying adds a
- *  middleman TCP hop whose aborted sockets surface as
- *  "[vite] ws proxy socket error: ECONNABORTED" whenever the page
- *  refreshes, StrictMode remounts, or a socket is replaced. The proxy
- *  entry stays only as a fallback for https pages without backend TLS. */
+ *  base with its scheme swapped (https -> wss), else same-origin — the page
+ *  origin serves the app and the Vite dev proxy forwards /ws to FastAPI.
+ *  One public tunnel URL therefore covers frontend, API, and signaling. */
 export function wsBaseUrl(): string {
   const override = ((import.meta.env.VITE_WS_URL as string | undefined) ?? "").replace(/\/$/, "");
   if (override) return override;
   if (API_BASE) return API_BASE.replace(/^http/, "ws");
-  if (typeof window !== "undefined" && window.location.protocol === "https:") {
-    return `wss://${window.location.host}`;
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${protocol}://${window.location.host}`;
   }
-  return `ws://${typeof window !== "undefined" ? window.location.hostname : "127.0.0.1"}:8000`;
+  return "ws://127.0.0.1:8000";
+}
+
+/** Rewrite an invitation URL to the current page origin so a scanned QR
+ *  never points at localhost when the host opened the app locally but
+ *  shares it through a public tunnel. Path, token, and query preserved. */
+export function publicInvitationUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const current = new URL(window.location.origin);
+    parsed.protocol = current.protocol;
+    parsed.host = current.host;
+    return parsed.toString();
+  } catch {
+    return url;
+  }
 }
 
 async function request<T>(path: string, options: RequestInit = {}, hostToken?: string): Promise<T> {
